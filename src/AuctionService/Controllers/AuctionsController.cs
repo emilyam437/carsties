@@ -5,6 +5,8 @@ using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using MassTransit;
+using Contracts;
 
 namespace AuctionService.Controllers;
 
@@ -14,9 +16,12 @@ public class AuctionsController : ControllerBase {
 
     private readonly AuctionDbContext _context;
     private readonly IMapper _mapper;
-    public AuctionsController(AuctionDbContext context, IMapper mapper) {
+
+    private readonly IPublishEndpoint _publishEndpoint;
+    public AuctionsController(AuctionDbContext context, IMapper mapper, IPublishEndpoint publishEndpoint) {
         _context = context;
         _mapper = mapper;
+        _publishEndpoint = publishEndpoint;
     }
 
     [HttpGet]
@@ -28,8 +33,20 @@ public class AuctionsController : ControllerBase {
         }
     // var auctions = await _context.Auctions.Include(x => x.Item).OrderBy(x => x.Item.Make).ToListAsync();
     //  return _mapper.Map<List<AuctionDto>>(auctions);
-    return await query.ProjectTo<AuctionDto>(_mapper.ConfigurationProvider).ToListAsync();
+  //  return await query.ProjectTo<AuctionDto>(_mapper.ConfigurationProvider).ToListAsync();
+  var auctions = await query.ProjectTo<AuctionDto>(_mapper.ConfigurationProvider).ToListAsync();
+   var auctionCount = auctions.Count;
+
+       var result = new
+    {
+        Auctions = auctions,
+        AuctionCount = auctionCount
+    };
+
+    return Ok(result);
     }
+
+
 
     [HttpGet("{id}")]
         public async Task<ActionResult<AuctionDto>> GetAuctionById(Guid id) {
@@ -48,11 +65,18 @@ public class AuctionsController : ControllerBase {
 
         _context.Auctions.Add(auction);
 
+        var newAuction = _mapper.Map<AuctionDto>(auction);
+
+        await _publishEndpoint.Publish(_mapper.Map<AuctionCreated>(newAuction));
+
         var result = await _context.SaveChangesAsync() > 0;
 
         if (!result) return BadRequest("Could not save changes to the auction DB.");
 
-        return CreatedAtAction(nameof(GetAuctionById), new {auction.Id}, _mapper.Map<AuctionDto>(auction));
+     //   return CreatedAtAction(nameof(GetAuctionById), new {auction.Id}, _mapper.Map<AuctionDto>(auction));
+
+     // replace _mapper.map with newAuction, which is an auctionDto, after creating the rabbitmq and masstransit middleware for messaging.
+        return CreatedAtAction(nameof(GetAuctionById), new {auction.Id}, newAuction);
     }
     [HttpPut("{id}")]
     public async Task<ActionResult> UpdateAuction(Guid id, UpdateAuctionDto updateAuctionDto) {
@@ -72,7 +96,7 @@ public class AuctionsController : ControllerBase {
     return BadRequest("Problem updating changes");
     }
 
-        [HttpDelete("{id}")]
+    [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteAuction(Guid id) {
 
             var auction = await _context.Auctions.FindAsync(id);
@@ -85,6 +109,19 @@ public class AuctionsController : ControllerBase {
             var result = await _context.SaveChangesAsync() >0;
             if (result) return Ok();
     return BadRequest("Problem deleting this auction");
+
+        }
+
+    [HttpDelete]
+        public async Task<ActionResult> DeleteAllAuctions() {
+        
+
+            // TODO: check seller == username
+            _context.Auctions.RemoveRange(_context.Auctions);
+
+            var result = await _context.SaveChangesAsync() > 0;
+            if (result) return Ok();
+    return BadRequest("Problem deleting auctions");
 
         }
 }

@@ -1,6 +1,6 @@
 using AuctionService;
 using AuctionService.Data;
-// using MassTransit;
+using MassTransit;
 // using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -19,6 +19,17 @@ builder.Services.AddDbContext<AuctionDbContext>(opt => {
 });
 
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+
+builder.Services.AddMassTransit(x => {
+    x.AddEntityFrameworkOutbox<AuctionDbContext>(options => {
+        options.QueryDelay = TimeSpan.FromSeconds(10);
+        options.UsePostgres();
+        options.UseBusOutbox();
+    });
+    x.UsingRabbitMq((context, cfg)=> {
+        cfg.ConfigureEndpoints(context);
+    });
+});
 
 var app = builder.Build();
 
