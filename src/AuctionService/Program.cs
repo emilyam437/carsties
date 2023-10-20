@@ -26,6 +26,11 @@ builder.Services.AddMassTransit(x => {
         options.UsePostgres();
         options.UseBusOutbox();
     });
+
+    x.AddConsumersFromNamespaceContaining<AuctionCreatedFaultsConsumer>(); 
+
+    x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("auction", false));
+
     x.UsingRabbitMq((context, cfg)=> {
         cfg.ConfigureEndpoints(context);
     });

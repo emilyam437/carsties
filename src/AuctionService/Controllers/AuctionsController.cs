@@ -35,15 +35,15 @@ public class AuctionsController : ControllerBase {
     //  return _mapper.Map<List<AuctionDto>>(auctions);
   //  return await query.ProjectTo<AuctionDto>(_mapper.ConfigurationProvider).ToListAsync();
   var auctions = await query.ProjectTo<AuctionDto>(_mapper.ConfigurationProvider).ToListAsync();
-   var auctionCount = auctions.Count;
+//    var auctionCount = auctions.Count;
 
-       var result = new
-    {
-        Auctions = auctions,
-        AuctionCount = auctionCount
-    };
+//        var result = new
+//     {
+//         Auctions = auctions,
+//         AuctionCount = auctionCount
+//     };
 
-    return Ok(result);
+    return Ok(auctions);
     }
 
 
@@ -91,6 +91,13 @@ public class AuctionsController : ControllerBase {
        // auction.Item.Mileage = updateAuctionDto.Mileage ?? auction.Item.Mileage;
        // auction.Item.Year = updateAuctionDto.Year ?? auction.Item.Year;
 
+        _context.Auctions.Update(auction);
+
+        var newAuction = _mapper.Map<AuctionDto>(auction);
+
+        await _publishEndpoint.Publish(_mapper.Map<AuctionUpdated>(newAuction));
+
+
     var result = await _context.SaveChangesAsync() >0;
     if (result) return Ok();
     return BadRequest("Problem updating changes");
@@ -102,10 +109,13 @@ public class AuctionsController : ControllerBase {
             var auction = await _context.Auctions.FindAsync(id);
             if (auction == null) return NotFound();
         
-
             // TODO: check seller == username
             _context.Auctions.Remove(auction);
+            
+           // var auctionToDelete = _mapper.Map<Auction>(auction);
 
+            await _publishEndpoint.Publish<AuctionDeleted>(new {Id = auction.Id.ToString()});
+            
             var result = await _context.SaveChangesAsync() >0;
             if (result) return Ok();
     return BadRequest("Problem deleting this auction");
